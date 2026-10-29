@@ -1,10 +1,10 @@
-import { REPORTS } from "@/lib/research-data";
+import { ALL_REPORTS } from "@/lib/research-scenarios";
 export async function POST(request: Request) {
   const origin = request.headers.get("origin");
   if (origin && origin !== new URL(request.url).origin)
     return Response.json({ error: "请求来源不匹配。" }, { status: 403 });
   const results = await Promise.all(
-    Object.entries(REPORTS).map(async ([year, r]) => {
+    ALL_REPORTS.map(async (r) => {
       const started = Date.now();
       try {
         const res = await fetch(r.url, {
@@ -12,7 +12,8 @@ export async function POST(request: Request) {
           signal: AbortSignal.timeout(10000),
         });
         return {
-          year: Number(year),
+          year: r.year,
+          company: r.company,
           url: r.url,
           status: res.ok ? "reachable" : "failed",
           httpStatus: res.status,
@@ -21,7 +22,8 @@ export async function POST(request: Request) {
         };
       } catch {
         return {
-          year: Number(year),
+          year: r.year,
+          company: r.company,
           url: r.url,
           status: "failed",
           durationMs: Date.now() - started,

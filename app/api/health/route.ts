@@ -7,6 +7,7 @@ export async function GET() {
       model: vars.MODEL_NAME || "deepseek-chat",
       dataMode: "verified_historical_disclosures",
       dataPeriods: [2023, 2024],
+      supportedCompanies: ["宁德时代", "小米集团", "比亚迪"],
       liveFinancialApi: false,
       automaticMonitoring: false,
     },

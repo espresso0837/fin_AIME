@@ -38,10 +38,9 @@ import {
 import {
   DEFAULT_QUESTION,
   DEFAULT_HYPOTHESES,
-  EVIDENCE,
-  REPORTS,
-  compareEvidence,
+
 } from "@/lib/research-data";
+import { SCENARIOS, ALL_EVIDENCE as EVIDENCE, ALL_REPORTS, scenarioById, resolveScenario, compareScenario } from "@/lib/research-scenarios";
 type H = {
   id: string;
   text: string;
@@ -55,6 +54,8 @@ type H = {
   changeReason?: string;
 };
 type S = {
+  scenarioId?: string;
+  asOf?: string;
   title: string;
   summary: string;
   hypotheses: H[];
@@ -86,14 +87,9 @@ const statuses: any = {
   mixed: "需要修正",
   uncertain: "待验证",
 };
-const names: any = {
-  revenue: "储能收入",
-  volume: "储能销量",
-  margin: "储能毛利率",
-  overseas: "全公司境外收入",
-  cross: "海外储能交叉披露",
-};
 const baseline: S = {
+  scenarioId: "catl",
+  asOf: "2024-03-21",
   title: "宁德时代：储能增长的下一段",
   summary:
     "2023 年储能收入与销量同步增长，盈利能力改善。海外业务值得继续研究，但现有披露尚不能量化海外储能的贡献。",
@@ -155,7 +151,7 @@ function date(x?: string) {
 }
 function val(x: number | null, u = "") {
   return x === null
-    ? "未单列"
+    ? "暂无数据"
     : x.toLocaleString("en-US", {
         maximumFractionDigits: u === "GWh" ? 0 : 2,
         minimumFractionDigits: u === "GWh" ? 0 : 2,
@@ -223,6 +219,10 @@ export default function App() {
   const task = tasks.find((t) => t.id === selected),
     ev = EVIDENCE.find((e) => e.id === evidenceId),
     inbox = tasks.filter((t) => t.pending);
+  const activeScenario = scenarioById(task?.current.scenarioId);
+  const names = activeScenario.metrics;
+  const taskEvidence = activeScenario.evidence;
+  const inputScenario = resolveScenario(question);
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORE);
@@ -342,6 +342,7 @@ export default function App() {
         body: JSON.stringify({
           action: "check",
           question: t.question,
+          scenarioId: t.current.scenarioId || "catl",
           hypotheses: t.current.hypotheses,
           feedback: t.feedback,
           previousSummary: t.current.summary,
@@ -588,7 +589,7 @@ export default function App() {
           return e ? (
             <button key={id} onClick={() => setEvidenceId(id)}>
               <FileText size={11} />
-              {e.year} · {names[e.metric]}
+              {e.year} · {e.label}
               <ArrowUpRight size={10} />
             </button>
           ) : null;
@@ -865,7 +866,7 @@ export default function App() {
                 <div>
                   <span>
                     <i className="dot" />
-                    宁德时代 · 储能研究
+                    {inputScenario ? `${inputScenario.company} · 已匹配披露资料` : "写下公司与判断，或选择下方场景"}
                   </span>
                   <button
                     aria-label="开始研究"
@@ -886,27 +887,13 @@ export default function App() {
                   </p>
                 )}
               </div>
-              <div className="chips">
-                <button onClick={() => setQuestion(DEFAULT_QUESTION)}>
-                  <Leaf size={12} />
-                  研究储能增长的持续性
-                  <ArrowUpRight size={11} />
-                </button>
-                <button
-                  onClick={() =>
-                    setQuestion(
-                      "宁德时代储能销量增长，为什么收入没有同步增长？希望重点跟踪收入与毛利率。",
-                    )
-                  }
-                >
-                  <SlidersHorizontal size={12} />
-                  拆开看：销量、收入与利润
-                </button>
+              <div className="scenario-grid">
+                {SCENARIOS.map((s,i) => <button key={s.id} className={"scenario-card " + (inputScenario?.id === s.id ? "selected" : "")} onClick={() => {setQuestion(s.question);setError("");document.getElementById("research-question")?.focus();}}>
+                  <div><span className="scenario-number">0{i+1}</span><ArrowUpRight size={14}/></div>
+                  <strong>{s.company}</strong><span>{s.title}</span><small>{s.focus}</small>
+                </button>)}
               </div>
-              <div className="scope">
-                当前覆盖一个完整案例<span>·</span>2023 → 2024 年真实披露 ·
-                历史回放
-              </div>
+              <div className="scope">三个场景，同一套研究流程<span>·</span>2023 → 2024 真实披露回放</div>
               <section className="recent">
                 <div className="section-head">
                   <h2>继续你的研究</h2>
@@ -954,7 +941,7 @@ export default function App() {
                 </span>
               </div>
               <div className="draft-summary">
-                <span className="label">初步研究 · 截至 2024-03-21</span>
+                <span className="label">初步研究 · {scenarioById(draft.scenarioId).company} · 截至 {draft.asOf || "2024-03-21"}</span>
                 <p>{draft.summary}</p>
               </div>
               {draft.hypotheses.map((h, i) => (
@@ -1069,7 +1056,7 @@ export default function App() {
               <div className="heading">
                 <div className="eyebrow">
                   <Leaf size={14} />
-                  宁德时代<span className="ticker">300750.SZ</span>
+                  {activeScenario.company}<span className="ticker">{activeScenario.ticker}</span>
                 </div>
                 <h1>{task.title}</h1>
                 <p>{task.question}</p>
@@ -1092,7 +1079,7 @@ export default function App() {
                   <strong>历史披露回放</strong>
                   <span>
                     当前基线 {task.current.year} 年报 · 资料日期{" "}
-                    {task.current.year === 2023 ? "2024-03-21" : "2025-03-17"}
+                    {task.current.asOf || activeScenario.reports[task.current.year].publishedAt}
                   </span>
                 </div>
                 <button onClick={() => setModal({ type: "guide" })}>
@@ -1183,10 +1170,10 @@ export default function App() {
                     </footer>
                   </section>
                   <div className="metrics">
-                    {EVIDENCE.filter(
+                    {taskEvidence.filter(
                       (e) =>
                         e.year === task.current.year &&
-                        ["revenue", "volume", "margin"].includes(e.metric),
+                        Object.keys(names).slice(0, 3).includes(e.metric),
                     ).map((e) => (
                       <button key={e.id} onClick={() => setEvidenceId(e.id)}>
                         <span>
@@ -1197,7 +1184,7 @@ export default function App() {
                           {val(e.value, e.unit)}
                           <small>{e.unit}</small>
                         </strong>
-                        <span>{e.year} 年 · 全球业务口径</span>
+                        <span>{e.year} 年 · {e.scope}</span>
                       </button>
                     ))}
                   </div>
@@ -1299,7 +1286,7 @@ export default function App() {
                       <span>期间</span>
                       <span />
                     </div>
-                    {EVIDENCE.filter((e) => e.year <= task.current.year).map(
+                    {taskEvidence.filter((e) => e.year <= task.current.year).map(
                       (e) => (
                         <button key={e.id} onClick={() => setEvidenceId(e.id)}>
                           <span>
@@ -1321,7 +1308,7 @@ export default function App() {
                   <div className="notice mt">
                     <Info size={14} />
                     <span>
-                      境外收入与储能收入来自不同维度，不能推算交叉收入。毛利率同比栏存在待核对差异。
+                      {activeScenario.boundary}
                     </span>
                   </div>
                 </>
@@ -1462,10 +1449,10 @@ export default function App() {
                   <span>2024 年</span>
                   <span>变化</span>
                 </div>
-                {compareEvidence().map((c: any) => (
+                {compareScenario(activeScenario).map((c: any) => (
                   <button
                     key={c.metric}
-                    onClick={() => setEvidenceId("E2024-" + c.metric)}
+                    onClick={() => setEvidenceId(c.evidenceIds[c.evidenceIds.length-1])}
                   >
                     <span>
                       {names[c.metric]}
@@ -1479,17 +1466,17 @@ export default function App() {
                       {val(c.current, c.unit)}
                       <small>{c.unit}</small>
                     </span>
-                    <span className={c.delta >= 0 ? "positive" : "negative"}>
-                      {c.metric === "margin"
-                        ? `+${c.delta.toFixed(2)} pp`
-                        : `${c.percentage > 0 ? "+" : ""}${c.percentage.toFixed(2)}%`}
+                    <span className={c.status === "missing" ? "" : c.delta >= 0 ? "positive" : "negative"}>
+                      {c.status === "missing" ? "暂无可比值" : c.unit === "%"
+                        ? `${c.delta > 0 ? "+" : ""}${c.delta.toFixed(2)} pp`
+                        : c.percentage === null ? "基期为零" : `${c.percentage > 0 ? "+" : ""}${c.percentage.toFixed(2)}%`}
                       <ArrowUpRight size={11} />
                     </span>
                   </button>
                 ))}
               </div>
               <p className="comparison-note">
-                销量增幅基于取整值计算；毛利率采用两期水平差（百分点），保留年报变动栏冲突。
+                {activeScenario.boundary} 百分比指标比较使用百分点；缺少基期时不计算增速。
               </p>
               <div className="section-head mt">
                 <h2>这些假设受到了影响</h2>
@@ -1593,8 +1580,8 @@ export default function App() {
                   [
                     Database,
                     "数据范围",
-                    "2023 / 2024 年报",
-                    "原文核对的公司原文摘录。金融 API 未接入，不含实时行情和新闻。",
+                    "3 家公司 · 2023 / 2024",
+                    "来自公司官网与交易所的年度披露摘录。金融 API 未接入，不含实时行情和新闻。",
                   ],
                   [
                     Clock3,
@@ -1629,12 +1616,12 @@ export default function App() {
                 </button>
               </div>
               <div className="source-docs">
-                {Object.entries(REPORTS).map(([year, r]) => (
-                  <a key={year} href={r.url} target="_blank" rel="noreferrer">
+                {ALL_REPORTS.map((r) => (
+                  <a key={r.url} href={r.url} target="_blank" rel="noreferrer">
                     <FileText size={21} />
                     <div>
                       <strong>{r.title}</strong>
-                      <small>公司官网 · 资料日期 {r.publishedAt}</small>
+                      <small>公司 / 交易所 · 资料日期 {r.publishedAt}</small>
                     </div>
                     <ExternalLink size={14} />
                   </a>
@@ -1647,13 +1634,13 @@ export default function App() {
                   ) : (
                     <>
                       {sources.results.map((s: any) => (
-                        <p key={s.year}>
+                        <p key={s.url}>
                           {s.status === "reachable" ? (
                             <Check size={12} />
                           ) : (
                             <AlertCircle size={12} />
                           )}{" "}
-                          {s.year} 年报：
+                          {s.company} {s.year} 年披露：
                           {s.status === "reachable"
                             ? "原文连接可达"
                             : "连接失败，历史摘录保留"}
@@ -1668,11 +1655,10 @@ export default function App() {
               <div className="boundaries">
                 <h3>必须保留的三条边界</h3>
                 <p>
-                  <span>01</span>境外收入覆盖全公司，不能直接推导海外储能收入。
+                  <span>01</span>研究对象、期间与口径分别校验，不会把一家公司的证据套到另一家。
                 </p>
                 <p>
-                  <span>02</span>2024
-                  年毛利率变动栏与两期水平存在差异，比较保留冲突并采用明确的水平差。
+                  <span>02</span>缺失数据保留为空，指标变化由程序计算，冲突和不可比情况单独说明。
                 </p>
                 <p>
                   <span>03</span>
@@ -1750,9 +1736,9 @@ export default function App() {
                   ],
                   [
                     "原始位置",
-                    `年报第 ${ev.page} 页 · PDF 第 ${ev.pdfPage} 页`,
+                    `原文第 ${ev.page} 页 · PDF 第 ${ev.pdfPage} 页`,
                   ],
-                  ["获取方式", "原文核对原文后结构化入库"],
+                  ["获取方式", "原始披露核对后结构化入库"],
                 ].map(([k, v]) => (
                   <div key={k}>
                     <dt>{k}</dt>
@@ -1773,7 +1759,7 @@ export default function App() {
                 target="_blank"
                 rel="noreferrer"
               >
-                打开公司原始年报
+                打开原始披露文件
                 <ArrowUpRight size={14} />
               </a>
               <p className="drawer-footnote">
@@ -1930,7 +1916,7 @@ export default function App() {
                   {[
                     [
                       "留下一个值得验证的问题",
-                      "输入宁德时代储能研究问题，模型读取 2023 年披露，形成可编辑假设。",
+                      "选择宁德时代、小米或比亚迪，也可以围绕这些公司输入自己的问题。模型读取2023年证据，形成可编辑假设。",
                     ],
                     [
                       "用新证据检查旧判断",

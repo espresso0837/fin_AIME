@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import ts from "typescript";
 const dir = new URL("../work/test-build/", import.meta.url);
 mkdirSync(dir, { recursive: true });
-for (const name of ["research-data", "research-engine"]) {
+for (const name of ["research-data", "research-scenarios", "research-engine"]) {
   const src = readFileSync(
     new URL("../lib/" + name + ".ts", import.meta.url),
     "utf8",
@@ -15,7 +15,7 @@ for (const name of ["research-data", "research-engine"]) {
         target: ts.ScriptTarget.ES2022,
       },
     })
-    .outputText.replace(/(["'])\.\/research-data\1/, '"./research-data.mjs"');
+    .outputText.replace(/(["'])\.\/(research-data|research-scenarios)\1/g, '"./$2.mjs"');
   writeFileSync(new URL(name + ".mjs", dir), js);
 }
 const { getEvidence, compareEvidence, DEFAULT_QUESTION } = await import(
@@ -160,7 +160,7 @@ await test("输出非JSON拒绝保存", async () => {
 await test("不支持的研究对象被明确拒绝", async () =>
   assert.rejects(
     () => runResearch({ question: "我想研究贵州茅台的增长空间" }, config),
-    /只支持宁德时代/,
+    /宁德时代、小米或比亚迪/,
   ));
 await test("反馈与编辑假设进入下一次模型输入", async () => {
   let n = 0,
@@ -208,6 +208,45 @@ await test("更新保留原假设ID且确定性比较完成", async () => {
   );
   assert.equal(out.hypotheses[0].text, "原假设");
   assert.ok(out.trace.some((x) => x.tool === "compare_periods"));
+});
+const { SCENARIOS, resolveScenario, readEvidence, compareScenario } = await import(new URL("research-scenarios.mjs", dir));
+await test("公司名称与代码路由到独立资料集", () => {
+ assert.equal(resolveScenario("研究1810.HK盈利")?.id,"xiaomi");
+ assert.equal(resolveScenario("研究比亚迪现金流")?.id,"byd");
+ assert.equal(resolveScenario("研究CATL增长")?.id,"catl");
+ assert.equal(resolveScenario("研究茅台"),undefined);
+});
+await test("所有证据ID唯一且每期只读取本公司数据", () => {
+ const ids=SCENARIOS.flatMap(s=>s.evidence.map(e=>e.id));
+ assert.equal(ids.length,new Set(ids).size);
+ for(const s of SCENARIOS) assert.ok(readEvidence(s,2023).every(e=>e.year===2023&&s.reports[2023].url===e.sourceUrl));
+});
+await test("小米毛利率下降0.3个百分点，新业务不造同比", () => {
+ const c=compareScenario(SCENARIOS[1]);
+ assert.equal(c.find(x=>x.metric==="margin").delta,-0.3);
+ assert.equal(c.find(x=>x.metric==="evRevenue").percentage,null);
+ assert.equal(c.find(x=>x.metric==="evRevenue").previous,null);
+});
+await test("比亚迪现金流下降且毛利率口径变更禁止直接相减", () => {
+ const c=compareScenario(SCENARIOS[2]);
+ assert.ok(c.find(x=>x.metric==="cashflow").percentage<0);
+ assert.equal(c.find(x=>x.metric==="margin").status,"missing");
+ assert.equal(c.find(x=>x.metric==="margin").delta,null);
+});
+await test("跨公司证据引用被拒绝", async () => {
+ let n=0;
+ await assert.rejects(()=>runResearch({question:SCENARIOS[1].question},config,async()=>completion(n++===0?tool("get_disclosure_evidence",{year:2023}):answer(["E2023-revenue"]))),/未读取的证据/);
+});
+await test("新增公司实际走同一工具循环并保留场景", async () => {
+ for(const s of SCENARIOS.slice(1)) {
+ let n=0;
+ const out=await runResearch({question:s.question},config,async()=>completion(n++===0?tool("get_disclosure_evidence",{year:2023}):answer([`${s.id}-E2023-revenue`])));
+ assert.equal(out.scenarioId,s.id);assert.equal(out.asOf,s.reports[2023].publishedAt);
+ }
+});
+await test("混合公司问题与任务对象错配被拒绝", async () => {
+ await assert.rejects(()=>runResearch({question:"小米和比亚迪谁更好"},config),/一家/);
+ await assert.rejects(()=>runResearch({question:SCENARIOS[1].question,scenarioId:"byd"},config),/不一致/);
 });
 writeFileSync(
   new URL("../work/unit-test-results.json", import.meta.url),
