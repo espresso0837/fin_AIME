@@ -3,6 +3,7 @@
 把一次投资判断保存为可以继续验证的研究任务。这个 Demo 围绕宁德时代储能业务，用两期真实年报验证「研究创建 → 证据更新 → 判断变化 → 用户反馈 → 再次检查」。
 
 - 产品地址：https://aime-research-notebook.wangzitong344.chatgpt.site
+- 源代码仓库：https://github.com/espresso0837/fin_AIME
 - 部署源 Git 仓库：https://git.chatgpt-team.site/70535faf-acdc-47be-bf25-396be43c274c/appgprj_6ae2cd2b77108191a0d489b8eecbc273.git （访问依赖 Sites 仓库凭据）
 - 离线源仓库：交付包中的 `aime-source.bundle`，可用 `git clone aime-source.bundle aime` 恢复。
 - 数据说明、验证记录、测试说明及演示脚本位于 `docs/`。
@@ -37,11 +38,11 @@ npm run start
 
 ## 环境变量
 
-| 变量 | 含义 |
-| --- | --- |
-| MODEL_API_KEY | 模型服务密钥，必需，服务端 secret |
-| MODEL_BASE_URL | 兼容 Chat Completions 的服务地址，默认 https://api.deepseek.com |
-| MODEL_NAME | 请求模型名称，默认 deepseek-chat；本轮 API 实际返回 deepseek-flash |
+| 变量           | 含义                                                               |
+| -------------- | ------------------------------------------------------------------ |
+| MODEL_API_KEY  | 模型服务密钥，必需，服务端 secret                                  |
+| MODEL_BASE_URL | 兼容 Chat Completions 的服务地址，默认 https://api.deepseek.com    |
+| MODEL_NAME     | 请求模型名称，默认 deepseek-chat；本轮 API 实际返回 deepseek-flash |
 
 未配置密钥时，示例基线和证据阅读仍可使用；真实生成与检查会返回明确失败，不以预写分析代替。生产当前配置使用用户授权提供的 DeepSeek 密钥。
 
